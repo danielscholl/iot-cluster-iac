@@ -20,3 +20,33 @@ Requires the use of [Docker](https://www.docker.com/get-started).
 - [iot-control-js](https://github.com/danielscholl/iot-control-js) - Simple Control Testing
 
 
+## Getting Started
+
+1. Run Install Script for ARM Process
+
+> Requires manually copying in the SSH Key that is created at this time.
+
+```bash
+# Initialize the Modules
+contact="<your_initials>"
+install.sh $contact
+```
+
+
+# Build and Test 
+
+>NOTE:  THIS CAN ONLY BE DONE FROM A LINUX SHELL!!
+
+1. Manually run the test suite
+
+```bash
+npm install
+npm test
+```
+
+2. Manually provision the infrastructure.
+
+```bash
+# Provision the infrastructure
+npm run provision
+```

@@ -1,7 +1,7 @@
 {
   "name": "iot-cluster-iac",
   "config": {
-    "initials": "iot"
+    "initials": "AzureCAT"
   },
   "version": "1.0.0",
   "description": "Infrastructure for Kubernetes Cluster",
