@@ -1,0 +1,504 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2015-01-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "initials": {
+      "type": "string",
+      "metadata": {
+        "description": "Small unique string."
+      }
+    },
+    "random": {
+      "type": "int",
+      "metadata": {
+        "description": "3 Digit Random Integer"
+      },
+      "minValue": 100,
+      "maxValue": 999
+    },
+    "vnetPrefix": {
+      "type": "string",
+      "metadata": {
+        "description": "Virtual Network Address Prefix CIDR"
+      },
+      "defaultValue": "10.0.0.0/16"
+    },
+    "subnet1Prefix": {
+      "type": "string",
+      "metadata": {
+        "description": "ContainerTier Address Prefix CIDR"
+      },
+      "defaultValue": "10.0.0.0/20"
+    },
+    "subnet2Prefix": {
+      "type": "string",
+      "metadata": {
+        "description": "EdgeTier Address Prefix CIDR"
+      },
+      "defaultValue": "10.0.16.0/24"
+    },
+    "agentCount": {
+      "type": "int",
+      "defaultValue": 1,
+      "metadata": {
+        "description": "The number of nodes for the cluster."
+      },
+      "minValue": 1,
+      "maxValue": 50
+    },
+    "agentVMSize": {
+      "type": "string",
+      "metadata": {
+        "description": "The size of the Virtual Machine."
+      },
+      "defaultValue": "Standard_DS2_v2"
+    },
+    "linuxAdminUsername": {
+      "type": "string",
+      "metadata": {
+        "description": "User name for the Linux Virtual Machines."
+      }
+    },
+    "sshRSAPublicKey": {
+      "type": "string",
+      "metadata": {
+        "description": "Configure all linux machines with the SSH RSA public key string. Your key should include three parts, for example 'ssh-rsa AAAAB...snip...UcyupgH azureuser@linuxvm'"
+      }
+    },
+    "servicePrincipalClientId": {
+      "metadata": {
+        "description": "Client ID (used by cloudprovider)"
+      },
+      "type": "securestring"
+    },
+    "servicePrincipalClientSecret": {
+      "metadata": {
+        "description": "The Service Principal Client Secret."
+      },
+      "type": "securestring"
+    },
+    "kubernetesVersion": {
+      "type": "string",
+      "defaultValue": "1.12.6",
+      "allowedValues": [
+        "1.9.11",
+        "1.10.13",
+        "1.11.8",
+        "1.12.6"
+      ],
+      "metadata": {
+        "description": "The version of Kubernetes."
+      }
+    },
+    "ubuntuOSVersion": {
+      "type": "string",
+      "metadata": {
+        "description": "The Ubuntu version for the VM. This will pick a fully patched image of this given Ubuntu version."
+      },
+      "defaultValue": "18.04-LTS",
+      "allowedValues": [
+        "12.04.5-LTS",
+        "14.04.4-LTS",
+        "16.04.0-LTS",
+        "18.04-LTS"
+      ]
+    },
+    "customData": {
+      "type": "string",
+      "defaultValue": "ZWNobyAnSGVsbG8gV29ybGQn",
+      "metadata": {
+        "description": "String passed down to the Virtual Machine."
+      }
+    }
+  },
+  "variables": {
+    "registryName": "[concat(parameters('initials'), 'registry', parameters('random'))]",
+    "clusterName": "[concat('aks-', parameters('random'))]",
+    "linuxProfile": {
+      "adminUsername": "[parameters('linuxAdminUsername')]",
+      "sshRsaPublicKey": "[parameters('sshRSAPublicKey')]",
+      "sshKeyPath": "[concat('/home/',parameters('linuxAdminUsername'),'/.ssh/authorized_keys')]"
+    },
+    "VNetName": "[concat(resourceGroup().name, '-vnet')]",
+    "VNetId": "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]",
+    "Subnet1Name": "containerTier",
+    "SubNet1Id": "[concat(variables('VNetId'), '/subnets/', variables('Subnet1Name'))]",
+    "Subnet2Name": "edgeTier",
+    "SubNet2Id": "[concat(variables('VNetId'), '/subnets/', variables('Subnet2Name'))]",
+    "Nsg1Name": "[concat(variables('VNetName'), '-', variables('Subnet1Name'), '-nsg')]",
+    "Nsg1Id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('Nsg1Name'))]",
+    "Nsg2Name": "[concat(variables('VNetName'), '-', variables('Subnet2Name'), '-nsg')]",
+    "Nsg2Id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('Nsg2Name'))]",
+    "NetworkPlugin": "azure",
+    "ServiceCidr": "10.3.0.0/24",
+    "DnsServiceIp": "10.3.0.10",
+    "DockerBridgeCidr": "172.17.0.1/16",
+    "vmName": "edge-vm",
+    "PublicIpName": "[concat(variables('vmName'), '-ip')]",
+    "PublicIpId": "[resourceId('Microsoft.Network/publicIPAddresses', variables('PublicIpName'))]",
+    "NicName": "[concat(variables('vmName'),'-nic')]",
+    "NicId": "[resourceId('Microsoft.Network/networkInterfaces', variables('NicName'))]"
+  },
+  "resources": [
+    {
+      "comments": "## Network Security Group ##",
+      "name": "[variables('nsg1Name')]",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2015-05-01-preview",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "environment": "dev",
+        "contact": "[parameters('initials')]"
+      },
+      "properties": {
+        "securityRules": [
+          {
+            "name": "SSH",
+            "properties": {
+              "priority": 1001,
+              "direction": "Inbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "22",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "description": "ssh-for-vm-management"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "comments": "## Network Security Group ##",
+      "name": "[variables('nsg2Name')]",
+      "type": "Microsoft.Network/networkSecurityGroups",
+      "apiVersion": "2015-05-01-preview",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "environment": "dev",
+        "contact": "[parameters('initials')]"
+      },
+      "properties": {
+        "securityRules": [
+          {
+            "name": "SSH",
+            "properties": {
+              "priority": 1001,
+              "direction": "Inbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "22",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "description": "ssh-for-vm-management"
+            }
+          },
+          {
+            "name": "RDP",
+            "properties": {
+              "priority": 1002,
+              "direction": "Inbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "3389",
+              "sourceAddressPrefix": "*",
+              "destinationAddressPrefix": "*",
+              "description": "rdp-for-vm-management"
+            }
+          },
+          {
+            "name": "AMQP",
+            "properties": {
+              "priority": 1003,
+              "direction": "Inbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "5671",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "description": "amqp-access-for-vnet"
+            }
+          },
+          {
+            "name": "MQTT",
+            "properties": {
+              "priority": 1004,
+              "direction": "Inbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "8883",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "description": "mqtt-access-for-vnet"
+            }
+          },
+          {
+            "name": "HTTPS",
+            "properties": {
+              "priority": 1005,
+              "direction": "Inbound",
+              "access": "Allow",
+              "protocol": "Tcp",
+              "sourcePortRange": "*",
+              "destinationPortRange": "443",
+              "sourceAddressPrefix": "Internet",
+              "destinationAddressPrefix": "*",
+              "description": "https-access-for-vnet"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "comments": "## Virtual Network ##",
+      "name": "[variables('VNetName')]",
+      "type": "Microsoft.Network/virtualNetworks",
+      "apiVersion": "2016-03-30",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsg1Name'))]",
+        "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsg2Name'))]"
+      ],
+      "tags": {
+        "environment": "dev",
+        "contact": "[parameters('initials')]"
+      },
+      "properties": {
+        "addressSpace": {
+          "addressPrefixes": [
+            "[parameters('VNetPrefix')]"
+          ]
+        },
+        "subnets": [
+          {
+            "name": "[variables('Subnet1Name')]",
+            "properties": {
+              "addressPrefix": "[parameters('Subnet1Prefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsg1Name'))]"
+              }
+            }
+          },
+          {
+            "name": "[variables('Subnet2Name')]",
+            "properties": {
+              "addressPrefix": "[parameters('Subnet2Prefix')]",
+              "networkSecurityGroup": {
+                "id": "[resourceId('Microsoft.Network/networkSecurityGroups', variables('nsg2Name'))]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "comments": "## Container Registry ##",
+      "name": "[variables('registryName')]",
+      "type": "Microsoft.ContainerRegistry/registries",
+      "apiVersion": "2017-10-01",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [],
+      "tags": {
+        "environment": "dev",
+        "contact": "[parameters('initials')]"
+      },
+      "sku": {
+        "name": "Standard",
+        "tier": "Standard"
+      },
+      "properties": {
+        "adminUserEnabled": false
+      }
+    },
+    {
+      "comments": "## Managed Kubernetes ##",
+      "name": "[variables('clusterName')]",
+      "type": "Microsoft.ContainerService/managedClusters",
+      "apiVersion": "2018-03-31",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "environment": "dev",
+        "contact": "[parameters('initials')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.ContainerRegistry/registries', variables('registryName'))]",
+        "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]"
+      ],
+      "properties": {
+        "kubernetesVersion": "[parameters('kubernetesVersion')]",
+        "enableRBAC": false,
+        "dnsPrefix": "[variables('clusterName')]",
+        "agentPoolProfiles": [
+          {
+            "name": "agentpool",
+            "osDiskSizeGB": 30,
+            "count": "[parameters('agentCount')]",
+            "vmSize": "[parameters('agentVMSize')]",
+            "osType": "Linux",
+            "storageProfile": "ManagedDisks",
+            "vnetSubnetID": "[variables('subnet1Id')]"
+          }
+        ],
+        "linuxProfile": {
+          "adminUsername": "[variables('linuxProfile').adminUsername]",
+          "ssh": {
+            "publicKeys": [
+              {
+                "keyData": "[variables('linuxProfile').sshRsaPublicKey]"
+              }
+            ]
+          }
+        },
+        "servicePrincipalProfile": {
+          "clientId": "[parameters('servicePrincipalClientId')]",
+          "secret": "[parameters('servicePrincipalClientSecret')]"
+        },
+        "networkConfiguration": {
+          "networkProfile": {
+            "networkPlugin": "[variables('NetworkPlugin')]",
+            "serviceCidr": "[variables('ServiceCidr')]",
+            "dnsServiceIp": "[variables('DnsServiceIp')]",
+            "dockerBridgeCidr": "[variables('DockerBridgeCidr')]"
+          }
+        }
+      }
+    },
+    {
+      "comments": "## Public IP Address ##",
+      "type": "Microsoft.Network/publicIPAddresses",
+      "name": "[variables('PublicIpName')]",
+      "apiVersion": "2015-06-15",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "environment": "dev",
+        "contact": "[parameters('initials')]"
+      },
+      "properties": {
+        "publicIPAllocationMethod": "Dynamic"
+      }
+    },
+    {
+      "comments": "## Network Interface ##",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[variables('NicName')]",
+      "apiVersion": "2016-03-30",
+      "location": "[resourceGroup().location]",
+      "tags": {
+        "environment": "dev",
+        "contact": "[parameters('initials')]"
+      },
+      "dependsOn": [
+        "[variables('PublicIpId')]",
+        "[variables('VNetId')]"
+      ],
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig1",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "publicIPAddress": {
+                "id": "[resourceId('Microsoft.Network/publicIPAddresses', variables('publicIPName'))]"
+              },
+              "subnet": {
+                "id": "[variables('subnet2Id')]"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "comments": "## Virtual Machine ##",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[concat(variables('vmName'))]",
+      "apiVersion": "2016-04-30-preview",
+      "location": "[resourceGroup().location]",
+      "dependsOn": [
+        "[variables('VNetId')]",
+        "[variables('NicId')]"
+      ],
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('agentVMSize')]"
+        },
+        "osProfile": {
+          "computerName": "[variables('vmName')]",
+          "adminUsername": "[parameters('linuxAdminUsername')]",
+          "linuxConfiguration": {
+            "disablePasswordAuthentication": true,
+            "ssh": {
+              "publicKeys": [
+                {
+                  "path": "[variables('linuxProfile').sshKeyPath]",
+                  "keyData": "[variables('linuxProfile').sshRsaPublicKey]"
+                }
+              ]
+            }
+          },
+          "customData": "[parameters('customData')]"
+        },
+        "storageProfile": {
+          "imageReference": {
+            "publisher": "Canonical",
+            "offer": "UbuntuServer",
+            "sku": "[parameters('ubuntuOSVersion')]",
+            "version": "latest"
+          },
+          "osDisk": {
+            "createOption": "FromImage"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[variables('NicId')]"
+            }
+          ]
+        }
+      },
+      "resources": []
+    }
+  ],
+  "outputs": {
+    "virtualNetwork": {
+      "type": "object",
+      "value": {
+        "id": "[variables('VNetId')]",
+        "name": "[variables('VNetName')]"
+      }
+    },
+    "subnets": {
+      "type": "object",
+      "value": {
+        "subnet1Id": "[variables('subnet1Id')]",
+        "subnet2Id": "[variables('subnet2Id')]"
+      }
+    },
+    "securityGroups": {
+      "type": "object",
+      "value": {
+        "nsg1Id": "[variables('nsg1Id')]",
+        "nsg2Id": "[variables('nsg2Id')]"
+      }
+    },
+    "containerRegistry": {
+      "type": "object",
+      "value": {
+        "id": "[reference(resourceId('Microsoft.ContainerRegistry/registries',variables('registryName')),'2016-06-27-preview').loginServer]",
+        "name": "[variables('registryName')]"
+      }
+    },
+    "controlPlane": {
+      "type": "object",
+      "value": {
+        "fqdn": "[reference(variables('clusterName')).fqdn]"
+      }
+    }
+  }
+}

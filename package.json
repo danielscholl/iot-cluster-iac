@@ -1,0 +1,24 @@
+{
+  "name": "iot-cluster-iac",
+  "config": {
+    "initials": "iot"
+  },
+  "version": "1.0.0",
+  "description": "Infrastructure for Kubernetes Cluster",
+  "scripts": {
+    "test": "tap tests/*.spec.js  --reporter spec",
+    "test-template": "tap tests/template.spec.js  --reporter spec",
+    "test-reporter": "tap tests/*.spec.js --reporter xunit --output-file .test-output/raw.txt > .test-output/results.xml",
+    "start": "watch 'clear && npm run -s test-template' .",
+    "provision": "./install.sh $npm_package_config_initials"
+  },
+  "author": "Daniel Scholl",
+  "license": "MIT",
+  "dependencies": {
+    "tape": "^4.10.1",
+    "should": "^13.2.3",
+    "tap": "^12.6.0",
+    "uuid": "^3.3.2",
+    "watch": "^1.0.2"
+  }
+}
