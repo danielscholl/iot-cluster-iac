@@ -37,14 +37,13 @@ steps:
   displayName: 'Publish Test Results results.xml'
   inputs:
     testResultsFiles: results.xml
-    searchFolder: '$(System.DefaultWorkingDirectory)/arm/.test-output'
+    searchFolder: '$(System.DefaultWorkingDirectory)/.test-output'
     testRunTitle: 'Unit Tests'
 
 - task: tsuyoshiushio.shell-exec.shellexec.shellexec@0
   displayName: 'Create Distribution'
   inputs:
     code: |
-     cd arm
      mkdir -p dist/templates
      cp azuredeploy.json dist/templates
      cp azuredeploy.parameters.json dist/templates
