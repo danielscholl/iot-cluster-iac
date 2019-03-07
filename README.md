@@ -2,6 +2,7 @@
 
 The purpose of this solution is to deploy a Kubernetes cluster to utilize for Device Simulations.
 
+[![Build Status](https://dascholl.visualstudio.com/IoT/_apis/build/status/danielscholl.iot-cluster-iac?branchName=master)](https://dascholl.visualstudio.com/IoT/_build/latest?definitionId=25&branchName=master)
 
 __PreRequisites__
 
