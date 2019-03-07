@@ -1,0 +1,36 @@
+# Node.js
+# Build a general Node.js project with npm.
+# Add steps that analyze code, save build artifacts, deploy, and more:
+# https://docs.microsoft.com/azure/devops/pipelines/languages/javascript
+
+trigger:
+- master
+
+pool:
+  vmImage: 'Ubuntu-16.04'
+
+variables:
+- group: azuresecrets
+
+steps:
+- task: NodeTool@0
+  inputs:
+    versionSpec: '8.x'
+  displayName: 'Install Node.js'
+
+- task: Npm@1
+  displayName: 'npm install'
+  inputs:
+    workingDir: .
+    verbose: false
+
+- task: AzureCLI@1
+  displayName: 'npm test'
+  inputs:
+    azureSubscription: $(ARM_SUBSCRIPTION_ID)
+    scriptLocation: inlineScript
+    inlineScript: |
+     cd arm
+     mkdir .test-output
+     npm run test-reporter
+    failOnStandardError: true
