@@ -14,7 +14,7 @@ if [ -f ./.envrc ]; then source ./.envrc; fi
 
 if [ ! -z $1 ]; then INITIALS=$1; fi
 if [ -z $INITIALS ]; then
-  INITIALS="CAT"
+  INITIALS="AzureCAT"
 fi
 
 if [ -z $ARM_SUBSCRIPTION_ID ]; then
@@ -131,7 +131,7 @@ CreateServicePrincipal $PrincipalName
 
 tput setaf 2; echo 'Creating SSH Keys...' ; tput sgr0
 AZURE_USER=$(az account show --query user.name -otsv)
-LINUX_USER=(${AZURE_USER//@/ })
+LINUX_USER=(${AZURE_USER//@/})
 CreateSSHKeys $AZURE_USER
 
 tput setaf 2; echo 'Deploying ARM Template...' ; tput sgr0

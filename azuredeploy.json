@@ -112,14 +112,15 @@
     }
   },
   "variables": {
-    "registryName": "[concat(parameters('initials'), 'registry', parameters('random'))]",
+    "cleanGroup": "[toLower(replace(resourceGroup().name,'-', ''))]",
+    "registryName": "[concat(variables('cleanGroup'), 'registry', parameters('random'))]",
     "clusterName": "[concat('aks-', parameters('random'))]",
     "linuxProfile": {
       "adminUsername": "[parameters('linuxAdminUsername')]",
       "sshRsaPublicKey": "[parameters('sshRSAPublicKey')]",
       "sshKeyPath": "[concat('/home/',parameters('linuxAdminUsername'),'/.ssh/authorized_keys')]"
     },
-    "VNetName": "[concat(resourceGroup().name, '-vnet')]",
+    "VNetName": "[concat(variables('cleanGroup'), '-vnet')]",
     "VNetId": "[resourceId('Microsoft.Network/virtualNetworks', variables('VNetName'))]",
     "Subnet1Name": "containerTier",
     "SubNet1Id": "[concat(variables('VNetId'), '/subnets/', variables('Subnet1Name'))]",
