@@ -18,19 +18,19 @@ steps:
     versionSpec: '8.x'
   displayName: 'Install Node.js'
 
+steps:
 - task: Npm@1
   displayName: 'npm install'
   inputs:
-    workingDir: .
     verbose: false
 
 - task: AzureCLI@1
-  displayName: 'npm test'
+  displayName: 'Azure CLI '
   inputs:
-    azureSubscription: 'AzureCAT'
+    azureSubscription: AzureCAT
     scriptLocation: inlineScript
     inlineScript: |
-     cd arm
      mkdir .test-output
      npm run test-reporter
     failOnStandardError: true
+
